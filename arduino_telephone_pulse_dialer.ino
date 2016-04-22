@@ -1,15 +1,17 @@
 /*  --------------------------------
 
      Arduino Telephone Pulse Dialer
+      Version 0.9: April 22, 2016
           by: Michael R. Wally
 
         Michael.R.Wally@gmail.com
 
+            This is free and
+         unencumbered software
+             released into
+           the public domain.
+
     --------------------------------  */
-
-
-
-
 
 /*  ========================
      HARDWARE CONFIGURATION
@@ -17,19 +19,16 @@
 
 /*
 
-    Relay Pin
-    =========
-  
-    The Arduino pin number for the pin physically
-    connected to the mechenical relay.
+    Output Pins
+    ===========
+
+    The microcontroller pin numbers for the pins
+    physically connected to the output device(s).
 
 */
 
-int relayPin = 13;
-
-
-
-
+const unsigned int outputPins  = 4;           // The quantity of output devices
+const unsigned int outputPin[] = {4,5,6,7};   // Individual pin numbers for each device
 
 /*  ========================
      SOFTWARE CONFIGURATION
@@ -37,22 +36,58 @@ int relayPin = 13;
 
 /*
 
-    Dial String
-    ===========
-  
-    The exact sequence to be dialed.
+    RNG Seed Value
+    ==============
 
-    Valid characters are:
+    The Seed Value for the Random Number Generator.
+    Please change this before deploying your Dialer.
 
-      0-9   Dial Pulse Digits
-      W     Wait (Fixed Delay)
-      R     Random Wait (Random Delay)
-      F     Flash (Hookswitch Flash)
+    Valid values are from 0 to 4,294,967,295.
 
 */
 
-const char dialString[] = "18002255288";
+const unsigned long rngSeed = 1234567890;
+                  // Maximum: 4294967295
 
+/*
+
+    Dial Strings
+    ============
+
+    The exact sequence(s) to be dialed.
+
+    Valid characters are:
+
+      0-9   Telephone Number Digits
+      ,     Fixed Delay
+      ~     Random Delay
+      !     Hookswitch Flash
+
+*/
+
+const unsigned int dialStrings  = 2;   // The quantity of Dial Strings
+const char*        dialString[] = {    // The individual  Dial Strings
+
+  "14122458085",
+  "00000000000"
+
+};
+
+/*
+
+    Dial Random
+    ===========
+
+    If set to TRUE, execute the dialStrings
+    in a pseudorandom order.
+
+    If set to FALSE, execute the dialStrings
+    in the exact order listed above.
+ 
+*/
+
+const boolean dialRandom = true;
+               // Default: true
 
 
 /*
@@ -61,28 +96,49 @@ const char dialString[] = "18002255288";
     ==============
   
     How long to wait, after taking the phone offhook,
-    before starting the dialing sequence.
+    before starting a dialing sequence.
+
+    Default: 3-5 Seconds.
 
 */
 
-int preDialDelay =  3000;
-        // Default: 3000 (3 seconds)
+const unsigned int preDialDelayMin =  3000;
+                          // Default: 3000 (3 seconds)
 
-
+const unsigned int preDialDelayMax =  5000;
+                          // Default: 5000 (5 seconds)
 
 /*
 
     Post-Dial Delay
     ===============
   
-    How long to wait after dialing the phone
-    number before disconnecting the call.
-
+    How long to wait after dialing the
+    sequence before going on-hook again.
+    
 */
 
-long postDialDelay = 60000;
-         // Default: 60000 (1 minute)
+const unsigned long postDialDelayMin = 60000;
+                           // Default: 60000  (1 minute)
 
+const unsigned long postDialDelayMax = 120000;
+                           // Default: 120000 (2 minutes)
+
+
+/*
+
+    Intercall Delay
+    ===============
+  
+    The duration between calls.
+  
+*/
+
+const unsigned long intercallDelayMin = 10000;
+                            // Default: 10000 (10 seconds)
+
+const unsigned long intercallDelayMax = 20000;
+                            // Default: 20000 (20 seconds)
 
 
 /*
@@ -91,13 +147,15 @@ long postDialDelay = 60000;
     ===========
   
     The duration of dial pulses to transmit.
+    
     This is normally 61ms in the United States.
+    This is normally 67ms in Europe.
 
 */
 
-int pulseBreak = 61;
-     // Default: 61 (EIA Standard RS-470)
-
+const unsigned int pulseBreak = 61;
+                 // US Default: 61 (EIA Standard RS-470)
+                 // EU Default: 67
 
 
 /*
@@ -106,136 +164,161 @@ int pulseBreak = 61;
     ==========
   
     The duration between dial pulses to transmit.
+
     This is normally 39ms in the United States.
+    This is normally 33ms in Europe.
   
 */
 
-int pulseMake = 39;
-    // Default: 39 (EIA Standard RS-470)
+const unsigned int pulseMake = 39;
+                // US Default: 39 (EIA Standard RS-470)
+                // EU Default: 33
+
+
 
 
 
 /*
 
-    Interdigit Time
-    ===============
+    Interdigit Delay
+    ================
   
     The duration between dial pulse digits.
-    This is normally between 300-700ms in the United States.
+    This is normally between 300-800ms in the United States.
   
 */
 
-int interdigitTime = 700;
-         // Default: 700
+const unsigned int interdigitDelayMin = 800;
+                            // Default: 800
+
+const unsigned int interdigitDelayMax = 800;
+                            // Default: 800
+
+
+
 
 
 
 /*
 
-    Intercall Time
-    =============
+    Hookflash Timings
+    =================
   
-    The duration between calls.
+    How long to open the circuit to indicate
+    a "hookflash" signal to the remote switch.
+
+    Typical values range from 300 to 800ms.
   
 */
 
-long intercallTime = 600000;
-         // Default: 600000 (10 minutes)
+const unsigned int flashBreak = 500;
+const unsigned int flashMake  = 500;
+                   // Defaults: 500
 
 
 
 
 
-/*  =====================
-     MISC. CONFIGURATION
-    =====================  */
-
-const char version[] = "0.01";
-int callCount = 0;
 
 
 
+/*
 
+    Dial Delay (Fixed)
+    ==================
+  
+    How long to delay the dialString
+    sequence for the ',' entry.
+  
+*/
+
+const unsigned int dialDelayFixed = 1000;
+                        // Default: 1000  (1 second)
+
+
+
+
+/*
+
+    Dial Delay (Random)
+    ==================
+  
+    How long to delay the dialString
+    sequence for the '~' entry.
+  
+*/
+
+
+const unsigned int dialDelayMin = 1000;
+                      // Default: 1000  (1 second)
+
+const unsigned int dialDelayMax = 3000;
+                      // Default: 3000  (3 seconds)
+
+
+
+
+
+
+
+
+
+/*  ======
+     BOOT
+    ======  */
 
 void setup() {
 
-  // Set Relay PIN
-  pinMode(relayPin, OUTPUT);
+  // Seed the Random Number Generator
+  randomSeed(rngSeed);
 
-  // Ensure Phone Line is On Hook
-  digitalWrite(relayPin, LOW);
-  
-  // Initialize the Serial Port
-  Serial.begin(9600);
-
-  // Boot Message
-  Serial.println("\n\n\n\n\n");
-  Serial.println("Arduino Telephone Pulse Dialer");
-  Serial.print("Version ");
-  Serial.println(version);
-  Serial.println();
+  // Configure the OUTPUT Pins
+  for (unsigned int i = 0; i < outputPins; i++) {
+    pinMode(outputPin[i], OUTPUT);
+  }
 
 }
 
 
+
+
+
+
+/*  ===============
+     DIAL SEQUENCE
+    ===============  */
 
 void loop() {
+  for (unsigned int i = 0; i < dialStrings; i++) {
 
-  // Tick Call Counter
-  callCount++;
- 
-  // Announce Call
-  serialPrintUptime();
-  Serial.print("---------- CALL #");
-  Serial.print(callCount);
-  Serial.println(" ----------");
+    if (dialRandom) { i = random(0,(dialStrings-1)); }
 
-  // Take Phone Line Off Hook
-  serialPrintUptime();
-  Serial.print("Going offhook... ");
+    offHook();
+    delay(random(preDialDelayMin,preDialDelayMax));
 
-  digitalWrite(relayPin, HIGH);
+    for (unsigned int digit = 0; digit < strlen(dialString[i]); digit++) {
+      dialDigit(dialString[i][digit]);
+      delay(random(interdigitDelayMin,interdigitDelayMax));
+    }
 
-  Serial.println("DONE");
+    delay(random(postDialDelayMin,postDialDelayMax));
+    onHook();
 
-  
-  // Execute Pre-Dial-Delay
-  serialPrintUptime();
-  Serial.print("Executing pre-dial delay... ");
-  
-  delay(preDialDelay);
-  
-  Serial.println("DONE");
-
-
-  for (int digit = 0; digit < (sizeof(dialString) - 1); digit++) {
-    
-    serialPrintUptime();
-    Serial.print("NOW PULSING ");
-    Serial.print(dialString[digit]);
-    Serial.print(": ");
-
-    dialDigit(dialString[digit]); 
-    delay(interdigitTime);
-    
-    Serial.println();
-
+    delay(random(intercallDelayMin,intercallDelayMax));
+      
   }
- 
-  // Execute Post-Dial-Delay
-  serialPrintUptime();
-  Serial.print("Executing post-dial delay... ");
-  
-  delay(postDialDelay);
-  
-  Serial.println("DONE");
-
-  // Extra whitespace before loop
-  Serial.println();
- 
 }
 
 
+
+
+
+
+
+
+/*  =============
+     DIAL DIGITS
+    =============  */
 
 void dialDigit(char digit) {
   
@@ -251,36 +334,61 @@ void dialDigit(char digit) {
     case '8': pulse(); pulse(); pulse(); pulse(); pulse(); pulse(); pulse(); pulse(); break;
     case '9': pulse(); pulse(); pulse(); pulse(); pulse(); pulse(); pulse(); pulse(); pulse(); break;
     case '0': pulse(); pulse(); pulse(); pulse(); pulse(); pulse(); pulse(); pulse(); pulse(); pulse(); break;
+
+    case '!': flash(); break;
+    case ',': delayFixed(); break;
+    case '~': delayRandom(); break;
     
   }
   
 }
 
 
-void pulse() {
+/*  ============
+     DIAL DELAY
+    ============  */
 
-  digitalWrite(relayPin, LOW);
-  delay(pulseBreak);
-
-  Serial.print("*");
-
-  digitalWrite(relayPin, HIGH);
-  delay(pulseMake);
-  
+void delayFixed() {
+  delay(dialDelayFixed);
 }
 
-void serialPrintUptime() {
-  
-  unsigned long uptime = millis();
-  
-  int days = uptime / 86400000;
-  int hours = (uptime % 86400000) / 3600000;
-  int minutes = ((uptime % 3600000) % 86400000) / 60000;
-  int seconds = (((uptime % 3600000) % 86400000) % 60000) / 1000;
+void delayRandom() {
+  delay(random(dialDelayMin,dialDelayMax));
+}
 
-  char uptimeOutput[30];
-  sprintf(uptimeOutput, "[%02dd %02d:%02d:%02d] ", days, hours, minutes, seconds);
 
-  Serial.print(uptimeOutput);
+/*  ===========
+     SIGNALING
+    ===========  */
 
+void pulse() {
+  onHook();
+  delay(pulseBreak);
+  offHook();
+  delay(pulseMake); 
+}
+
+void flash() {
+  onHook();
+  delay(flashBreak);
+  offHook();
+  delay(flashMake);
+}
+
+
+
+/*  ===========
+     LINE HOOK
+    ===========  */
+
+void offHook() {
+  for (unsigned int i = 0; i < outputPins; i++) {
+    digitalWrite(outputPin[i], HIGH);
+  }
+}
+
+void onHook() {
+  for (unsigned int i = 0; i < outputPins; i++) {
+    digitalWrite(outputPin[i], LOW);
+  }
 }
